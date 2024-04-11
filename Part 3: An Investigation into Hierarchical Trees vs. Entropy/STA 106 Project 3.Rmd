@@ -1,0 +1,190 @@
+---
+title: "STA 106 Project 3"
+author: "Judah Hsu"
+date: "2023-03-22"
+output: html_document
+---
+#Choose 5 binary variables, no need to construct hecka contingency tables
+#but HC tree needed, with heat map, and entropy analysis
+
+#5 datasets with regard to genhealth, with a focal point on BMI
+#In each dataset, investigate the 3,4,5 way interacting effects on genhelath vs others
+#within each subset, apply HC and entropy
+#So i think like; in genhealth1, do entropy and apply HC... then do that 5 times for genhealth
+#Yeah and this'll help you actually be able to mamke trees because it's more split up LOL
+
+
+```{r}
+library(NSM3)
+library(car)
+library(factoextra)
+library(cluster)
+library(iNZightTools)
+HDdata <- read.csv("~/Desktop/Classes/STA 106/HDIndicators.csv")
+#Variables
+sub1 = HDdata[HDdata$Education==1,]
+HDdata$Smoker=as.factor(HDdata$Smoker)
+HDdata$HvyAlcoholConsump=as.factor(HDdata$HvyAlcoholConsump)
+HDdata$HighBP=as.factor(HDdata$HighBP)
+HDdata$GenHlth = as.factor(HDdata$GenHlth)
+combined = combineCatVars(HDdata, vars=c('GenHlth', 'Smoker', 'HvyAlcoholConsump','HighBP'), sep='_')
+combined
+```
+
+```{r}
+Build_contingencytable=function(data,group,variable,bins=10,proportion=FALSE){
+  table1=NULL
+  # create break points for the following histograms
+  # from minimum to maximum with equal distance
+  ax=seq(min(data[,variable]),max(data[,variable]),length.out=bins+1)
+  # Save histogram data
+  list_group=unique(data[,group])
+  for(i in list_group){
+    hg1=hist(data[data[,group]==i,variable], breaks = ax,plot = FALSE)
+    table1=rbind(table1,hg1$counts)
+  }
+  rownames(table1)=list_group
+  colnames(table1)=1:ncol(table1)
+  # calculate row sum and combine it  with the current table
+  table1=cbind(table1, 'Total'=apply(table1,1,sum))
+  # calculate column sum and combine it  with the current table
+  table1=rbind(table1, 'Total'=apply(table1,2,sum))
+  
+  if(proportion){
+    # convert to proportions
+    n_col=ncol(table1)
+    for(i in 1:nrow(table1)){
+      table1[i,]=table1[i,]/table1[i,n_col]
+    }
+  }
+  table1
+}
+df=Build_contingencytable(data=combined,group="GenHlth_Smoker_HvyAlcoholConsump_HighBP", "BMI", 10, TRUE)
+df=df[,1:(ncol(df)-1)]
+df
+#I want to create a dataframe just for genHealth 1 because I just want to do each individual approach within
+#the genhlths 
+
+rowNames = c(row.names(df))
+numRows = nrow(df)
+GenHlth1Names = c()
+GenHlth2Names = c()
+GenHlth3Names = c()
+GenHlth4Names = c()
+GenHlth5Names = c()
+#Names for side ID
+for(i in 1:numRows){
+  if(substr(rowNames[i], 1, 1) == "1"){
+    GenHlth1Names = c(GenHlth1Names, rowNames[i])
+  }
+  else if(substr(rowNames[i], 1, 1) == "2"){
+    GenHlth2Names = c(GenHlth2Names, rowNames[i])
+  }
+  else if(substr(rowNames[i], 1, 1) == "3"){
+    GenHlth3Names = c(GenHlth3Names, rowNames[i])
+  }
+  else if(substr(rowNames[i], 1, 1) == "4"){
+    GenHlth4Names = c(GenHlth4Names, rowNames[i])
+  }
+  else if(substr(rowNames[i], 1, 1) == "5"){
+    GenHlth5Names = c(GenHlth5Names, rowNames[i])
+  }
+}
+GenHlth1df = data.frame()
+GenHlth2df = data.frame()
+GenHlth3df = data.frame()
+GenHlth4df = data.frame()
+GenHlth5df = data.frame()
+for(i in 1:numRows){
+  if (substr(rowNames[i], 1, 1) == "5"){
+    #GenHlth5df = rbind(GenHlth5df, cbind(rowNames[i],df[i,]))
+    GenHlth5df = rbind(GenHlth5df, df[i,])
+  }
+  else if (substr(rowNames[i], 1, 1) == "4"){
+    GenHlth4df = rbind(GenHlth4df, df[i,])
+  }
+  else if (substr(rowNames[i], 1, 1) == "3"){
+    GenHlth3df = rbind(GenHlth3df, df[i,])
+  }
+  else if (substr(rowNames[i], 1, 1) == "2"){
+    GenHlth2df = rbind(GenHlth2df, df[i,])
+  }
+  else if (substr(rowNames[i], 1, 1) == "1"){
+    GenHlth1df = rbind(GenHlth1df, df[i,])
+  }
+}
+colNames = c('1', '2', '3', '4', '5', '6', '7', '8', '9', '10')
+colnames(GenHlth1df) <- colNames
+colnames(GenHlth2df) <- colNames
+colnames(GenHlth3df) <- colNames
+colnames(GenHlth4df) <- colNames
+colnames(GenHlth5df) <- colNames
+rownames(GenHlth1df) <- GenHlth1Names
+rownames(GenHlth2df) <- GenHlth2Names
+rownames(GenHlth3df) <- GenHlth3Names
+rownames(GenHlth4df) <- GenHlth4Names
+rownames(GenHlth5df) <- GenHlth5Names
+GenHlth5df
+GenHlth4df
+GenHlth3df
+GenHlth2df
+GenHlth1df
+#Should be 8x10 (10 proportions bin size) Because within each subgroup GenHlth, there's 8 variables
+#also i want to set header labels as well as side labels
+#honestly header prolly isn't as important but the row id labels are important
+```
+```{r}
+#I think we're supposed to bootstrap the multinomial distributino based on entropy #Worst comes to worst, just do in
+#dividual histograms
+
+#Multinomial
+# rmultinom(n, size, prob)
+# n:    number of random vectors to draw.
+# size: total number of objects that are put into K classes in the typical multinomial experiment.
+# prob: the probability for the K classes
+# output: an integer K x n matrix where each column is a random vector generated according to the desired multinomial law, and hence summing to size.
+
+# load package DescTools
+library(DescTools)
+#HC TREE OF PROPORTION... P1 is a vector of proportions for sample P then find hc tree between the of proportions 
+entropyCluster = c()
+# Entropy(x,base): calculate Shannon entropy
+# x: contingency table
+# base: base of the logarithm to be used, defaults to 2.
+par(mfrow = c(4, 2))
+j = nrow(GenHlth1df)
+for(k in 1:j){
+  # generate 1000 random samples from multinomial distribution
+  sample1=rmultinom(1000,100,GenHlth1df[k,]) #change the 9 to change the different histogram vectors
+  B=ncol(sample1)
+  # initialize a vector to save all entropies.
+  entropies=numeric(B)
+  for(i in 1:B){
+    entropies[i]=Entropy(sample1[,i],base=exp(1))
+  }
+  #### WEIRD NAMES BC TITLE IS BASED ON OLD ROWNAMES
+  histTitle = paste('Histograms of Entropy', as.character(rowNames[k]), sep=" ")
+  hist(entropies,main=histTitle,xlab='Entropy')
+}
+```
+
+#IG for the hierarchical trees, maybe find distances between means? Oh wait no entropies right
+# FUDGEGEEGGE
+#For HC Tree Have one big column of values and then a repetition of the labels
+#Then turn it into a data frame
+#5 datasets with regard to genhealth, with a focal point on BMI
+#In each dataset, investigate the 3,4,5 way interacting effects on genhelath vs others
+#within each subset, apply HC and entropy
+#So i think like; in genhealth1, do entropy and apply HC... then do that 5 times for genhealth
+#Yeah and this'll help you actually be able to mamke trees because it's more split up LOL
+```{r}
+#combined
+#combined$BMI
+#USE PROPORTIONS FROM CONTINGENCY TABLE
+SmAlcBP = data.frame(subset(combined)$Smoker_HvyAlcoholConsump_HighBP, subset(combined)$BMI)
+clusters = hclust(dist(SmAlcBP))
+
+plot(clusters, xlab='', main='Dendrogram')
+clusterCut <- cutree(clusters, 10)
+rect.hclust(clusters, k=10)
+```
